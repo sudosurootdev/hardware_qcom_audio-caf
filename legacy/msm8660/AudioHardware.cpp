@@ -3345,7 +3345,7 @@ ssize_t AudioHardware::AudioStreamInVoip::read( void* buffer, ssize_t bytes)
            int bytesRead = ::read(mFd, &audio_mvs_frame, sizeof(audio_mvs_frame));
            ALOGV("PCM read_bytes = %d mvs\n", bytesRead);
            if (bytesRead > 0) {
-                   memcpy(buffer+totalBytesRead, &audio_mvs_frame.voc_pkt, mBufferSize);
+                   memcpy((char*)buffer+totalBytesRead, &audio_mvs_frame.voc_pkt, mBufferSize);
                    count -= mBufferSize;
                    totalBytesRead += mBufferSize;
                    if(!mFirstread) {
