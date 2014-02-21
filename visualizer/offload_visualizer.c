@@ -622,22 +622,27 @@ int visualizer_get_parameter(effect_context_t *context, effect_param_t *p, uint3
         p->status = -EINVAL;
         return 0;
     }
-    switch (*(uint32_t *)p->data) {
+    struct {
+      uint32_t *pdata;
+      char *data;
+    };
+    data = p->data;
+    switch (pdata[0]) {
     case VISUALIZER_PARAM_CAPTURE_SIZE:
         ALOGV("%s get capture_size = %d", __func__, visu_ctxt->capture_size);
-        *((uint32_t *)p->data + 1) = visu_ctxt->capture_size;
+        pdata[1] = visu_ctxt->capture_size;
         p->vsize = sizeof(uint32_t);
         *size += sizeof(uint32_t);
         break;
     case VISUALIZER_PARAM_SCALING_MODE:
         ALOGV("%s get scaling_mode = %d", __func__, visu_ctxt->scaling_mode);
-        *((uint32_t *)p->data + 1) = visu_ctxt->scaling_mode;
+        pdata[1] = visu_ctxt->scaling_mode;
         p->vsize = sizeof(uint32_t);
         *size += sizeof(uint32_t);
         break;
     case VISUALIZER_PARAM_MEASUREMENT_MODE:
         ALOGV("%s get meas_mode = %d", __func__, visu_ctxt->meas_mode);
-        *((uint32_t *)p->data + 1) = visu_ctxt->meas_mode;
+        pdata[1] = visu_ctxt->meas_mode;
         p->vsize = sizeof(uint32_t);
         *size += sizeof(uint32_t);
         break;
@@ -654,13 +659,19 @@ int visualizer_set_parameter(effect_context_t *context, effect_param_t *p, uint3
     if (p->psize != sizeof(uint32_t) || p->vsize != sizeof(uint32_t))
         return -EINVAL;
 
-    switch (*(uint32_t *)p->data) {
+    union {
+      char *data;
+      uint32_t *pdata;
+    };
+    data = p->data;
+
+    switch (pdata[0]) {
     case VISUALIZER_PARAM_CAPTURE_SIZE:
-        visu_ctxt->capture_size = *((uint32_t *)p->data + 1);
+        visu_ctxt->capture_size = pdata[1];
         ALOGV("%s set capture_size = %d", __func__, visu_ctxt->capture_size);
         break;
     case VISUALIZER_PARAM_SCALING_MODE:
-        visu_ctxt->scaling_mode = *((uint32_t *)p->data + 1);
+        visu_ctxt->scaling_mode = pdata[1];
         ALOGV("%s set scaling_mode = %d", __func__, visu_ctxt->scaling_mode);
         break;
     case VISUALIZER_PARAM_LATENCY:
@@ -669,7 +680,7 @@ int visualizer_set_parameter(effect_context_t *context, effect_param_t *p, uint3
         ALOGV("%s set latency = %d", __func__, visu_ctxt->latency);
         break;
     case VISUALIZER_PARAM_MEASUREMENT_MODE:
-        visu_ctxt->meas_mode = *((uint32_t *)p->data + 1);
+        visu_ctxt->meas_mode = pdata[1];
         ALOGV("%s set meas_mode = %d", __func__, visu_ctxt->meas_mode);
         break;
     default:
@@ -1066,7 +1077,12 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
 
 //    ALOGV_IF(cmdCode != VISUALIZER_CMD_CAPTURE,
 //             "%s command %d cmdSize %d", __func__, cmdCode, cmdSize);
-
+    struct {
+        void *replyData;
+        int *iReplyData;
+        int32_t *i32ReplyData;
+    };
+    replyData = pReplyData;
     switch (cmdCode) {
     case EFFECT_CMD_INIT:
         if (pReplyData == NULL || *replySize != sizeof(int)) {
@@ -1074,9 +1090,9 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
             goto exit;
         }
         if (context->ops.init)
-            *(int *) pReplyData = context->ops.init(context);
+            iReplyData[0] = context->ops.init(context);
         else
-            *(int *) pReplyData = 0;
+            iReplyData[0] = 0;
         break;
     case EFFECT_CMD_SET_CONFIG:
         if (pCmdData == NULL || cmdSize != sizeof(effect_config_t)
@@ -1084,7 +1100,7 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
             status = -EINVAL;
             goto exit;
         }
-        *(int *) pReplyData = set_config(context, (effect_config_t *) pCmdData);
+        iReplyData[0] = set_config(context, (effect_config_t *) pCmdData);
         break;
     case EFFECT_CMD_GET_CONFIG:
         if (pReplyData == NULL ||
@@ -1117,7 +1133,7 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
             context->ops.enable(context);
         pthread_cond_signal(&cond);
         ALOGV("%s EFFECT_CMD_ENABLE", __func__);
-        *(int *)pReplyData = 0;
+        iReplyData[0] = 0;
         break;
     case EFFECT_CMD_DISABLE:
         if (pReplyData == NULL || *replySize != sizeof(int)) {
@@ -1133,7 +1149,7 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
             context->ops.disable(context);
         pthread_cond_signal(&cond);
         ALOGV("%s EFFECT_CMD_DISABLE", __func__);
-        *(int *)pReplyData = 0;
+        iReplyData[0] = 0;
         break;
     case EFFECT_CMD_GET_PARAM: {
         if (pCmdData == NULL ||
@@ -1159,10 +1175,10 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
             status = -EINVAL;
             goto exit;
         }
-        *(int32_t *)pReplyData = 0;
+        iReplyData[0] = 0;
         effect_param_t *p = (effect_param_t *)pCmdData;
         if (context->ops.set_parameter)
-            *(int32_t *)pReplyData = context->ops.set_parameter(context, p, *replySize);
+            i32ReplyData[0] = context->ops.set_parameter(context, p, *replySize);
 
         } break;
     case EFFECT_CMD_SET_DEVICE:
@@ -1185,7 +1201,7 @@ int effect_command(effect_handle_t self, uint32_t cmdCode, uint32_t cmdSize,
         ALOGV("%s EFFECT_CMD_OFFLOAD offload %d output %d",
               __func__, offload_param->isOffload, offload_param->ioHandle);
 
-        *(int *)pReplyData = 0;
+        iReplyData[0] = 0;
 
         context->offload_enabled = offload_param->isOffload;
         if (context->out_handle == offload_param->ioHandle)
