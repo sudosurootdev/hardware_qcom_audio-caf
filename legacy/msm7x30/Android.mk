@@ -8,6 +8,22 @@ LOCAL_SRC_FILES := \
     AudioHardware.cpp \
     audio_hw_hal.cpp
 
+ifeq ($(strip $(QCOM_ANC_HEADSET_ENABLED)),true)
+    common_cflags += -DQCOM_ANC_HEADSET_ENABLED
+endif
+ifeq ($(strip $(QCOM_CSDCLIENT_ENABLED)),true)
+    common_cflags += -DQCOM_CSDCLIENT_ENABLED
+endif
+ifeq ($(strip $(QCOM_FM_ENABLED)),true)
+    common_cflags += -DQCOM_FM_ENABLED
+endif
+ifeq ($(strip $(QCOM_PROXY_DEVICE_ENABLED)),true)
+    common_cflags += -DQCOM_PROXY_DEVICE_ENABLED
+endif
+ifeq ($(strip $(QCOM_OUTPUT_FLAGS_ENABLED)),true)
+    common_cflags += -DQCOM_OUTPUT_FLAGS_ENABLED
+endif
+
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
      LOCAL_CFLAGS += -DWITH_A2DP
 endif
@@ -93,34 +109,27 @@ endif
 
 include $(BUILD_SHARED_LIBRARY)
 
-# The audio policy is implemented on top of legacy policy code
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := \
-    AudioPolicyManager.cpp \
-    audio_policy_hal.cpp
+LOCAL_CFLAGS += $(common_cflags)
 
-LOCAL_SHARED_LIBRARIES := \
-    libcutils \
-    libutils \
-    libmedia
+LOCAL_SRC_FILES := \
+    audio_policy_hal.cpp \
+    AudioPolicyManager.cpp
+
+LOCAL_MODULE := audio_policy.msm7x30
+
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+LOCAL_MODULE_TAGS := optional
 
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
     libaudiopolicy_legacy
 
-LOCAL_MODULE := audio_policy.msm7x30
-LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
-LOCAL_MODULE_TAGS := optional
+LOCAL_SHARED_LIBRARIES := \
+    libcutils \
+    libutils
 
-ifeq ($(BOARD_HAVE_BLUETOOTH),true)
-    LOCAL_CFLAGS += -DWITH_A2DP
-endif
-
-ifeq ($(BOARD_USES_QCOM_AUDIO_LPA),true)
-    LOCAL_CFLAGS += -DQCOM_TUNNEL_LPA_ENABLED
-endif
-
-LOCAL_C_INCLUDES := hardware/libhardware_legacy/audio
+LOCAL_C_INCLUDES += hardware/libhardware_legacy/audio
 
 include $(BUILD_SHARED_LIBRARY)
