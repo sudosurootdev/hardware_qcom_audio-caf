@@ -587,7 +587,11 @@ int mmap_transfer(struct pcm *pcm, void *data, unsigned offset,
 
     frames = frames * channels *2 ;
 
-    memcpy(dst_addr, src_addr, (size_t)frames);
+    while (frames-- > 0) {
+        *dst_addr = *src_addr;
+        src_addr++;
+        dst_addr++;
+    }
     return 0;
 }
 
@@ -618,7 +622,11 @@ int mmap_transfer_capture(struct pcm *pcm, void *data, unsigned offset,
     src_addr = pcm->addr + pcm_offset;
     frames = frames * channels *2 ;
 
-    memcpy(dst_addr, src_addr, (size_t)frames);
+    while (frames-- > 0) {
+        *dst_addr = *src_addr;
+        src_addr++;
+        dst_addr++;
+    }
     return 0;
 }
 
