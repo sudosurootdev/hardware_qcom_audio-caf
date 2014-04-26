@@ -2,6 +2,24 @@
 #ENABLE_AUDIO_DUMP := true
 
 LOCAL_PATH := $(call my-dir)
+
+common_cflags := -D_POSIX_SOURCE
+ifneq ($(strip $(QCOM_ANC_HEADSET_ENABLED)),false)
+    common_cflags += -DQCOM_ANC_HEADSET_ENABLED
+endif
+ifneq ($(strip $(QCOM_CSDCLIENT_ENABLED)),false)
+    common_cflags += -DQCOM_CSDCLIENT_ENABLED
+endif
+ifeq ($(strip $(QCOM_FM_ENABLED)),true)
+    common_cflags += -DQCOM_FM_ENABLED
+endif
+ifneq ($(strip $(QCOM_PROXY_DEVICE_ENABLED)),false)
+    common_cflags += -DQCOM_PROXY_DEVICE_ENABLED
+endif
+ifneq ($(strip $(QCOM_OUTPUT_FLAGS_ENABLED)),false)
+    common_cflags += -DQCOM_OUTPUT_FLAGS_ENABLED
+endif
+
 include $(CLEAR_VARS)
 
 LOCAL_CFLAGS += $(common_cflags)
@@ -83,15 +101,11 @@ include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := AudioPolicyManager.cpp
+LOCAL_CFLAGS += $(common_cflags)
 
-LOCAL_SHARED_LIBRARIES := \
-    libcutils \
-    libutils \
-    liblog
-
-LOCAL_STATIC_LIBRARIES := \
-    libmedia_helper
+LOCAL_SRC_FILES := \
+    audio_policy_hal.cpp \
+    AudioPolicyManager.cpp
 
 LOCAL_WHOLE_STATIC_LIBRARIES := \
     libaudiopolicy_legacy
@@ -100,14 +114,14 @@ LOCAL_MODULE := audio_policy.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
-ifneq ($(strip $(AUDIO_FEATURE_DISABLED_FM)),true)
-LOCAL_CFLAGS += -DAUDIO_EXTN_FM_ENABLED
-endif
-ifneq ($(strip $(AUDIO_FEATURE_DISABLED_PROXY_DEVICE)),true)
-LOCAL_CFLAGS += -DAUDIO_EXTN_AFE_PROXY_ENABLED
-endif
-ifneq ($(strip $(AUDIO_FEATURE_DISABLED_INCALL_MUSIC)),true)
-LOCAL_CFLAGS += -DAUDIO_EXTN_INCALL_MUSIC_ENABLED
-endif
+LOCAL_STATIC_LIBRARIES := \
+    libmedia_helper \
+    libaudiopolicy_legacy
+
+LOCAL_SHARED_LIBRARIES := \
+    libcutils \
+    libutils
+
+LOCAL_C_INCLUDES += hardware/libhardware_legacy/audio
 
 include $(BUILD_SHARED_LIBRARY)
