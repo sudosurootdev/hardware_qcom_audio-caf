@@ -27,6 +27,7 @@
 #include <utils/threads.h>
 #include <sys/prctl.h>
 #include <utils/SortedVector.h>
+#include <cutils/properties.h>
 
 #include <hardware_legacy/AudioHardwareBase.h>
 
@@ -377,6 +378,7 @@ private:
         }
         virtual uint32_t    channels() const { return AUDIO_CHANNEL_OUT_STEREO; }
         virtual int         format() const { return AUDIO_FORMAT_PCM_16_BIT; }
+
         virtual uint32_t    latency() const { return (1000*AUDIO_HW_NUM_OUT_BUF*(bufferSize()/frameSize()))/sampleRate()+AUDIO_HW_OUT_LATENCY_MS; }
         virtual status_t    setVolume(float left, float right) { return INVALID_OPERATION; }
         virtual ssize_t     write(const void* buffer, size_t bytes);
