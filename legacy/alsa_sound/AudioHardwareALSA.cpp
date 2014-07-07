@@ -840,14 +840,11 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
-    int tmp=-1;
     key = String8(VSID_KEY);
-    if (param.getInt(key, tmp) == NO_ERROR) {
-        vsid = (uint32_t)tmp;
+    if (param.getInt(key, (int &)vsid) == NO_ERROR) {
         param.remove(key);
         key = String8(CALL_STATE_KEY);
-        if (param.getInt(key, tmp) == NO_ERROR) {
-            call_state = (enum call_state)tmp;
+        if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
             if (isAnyCallActive() || (call_state == CALL_ACTIVE) ||((call_state == CALL_INACTIVE) && mVSID == vsid)) {
                 mVSID = vsid;

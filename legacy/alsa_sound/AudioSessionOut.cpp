@@ -354,7 +354,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         return err;
     }
     ALOGV("PCM write before memcpy start");
-    memcpy(((char*)buf.memBuf + mOutputMetadataLength), buffer, bytes);
+    memcpy((buf.memBuf + mOutputMetadataLength), buffer, bytes);
 
     buf.bytesToWrite = bytes;
 
