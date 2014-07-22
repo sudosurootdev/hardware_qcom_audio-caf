@@ -1067,6 +1067,18 @@ audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
     if (profile != NULL) {
         AudioOutputDescriptor *outputDesc = NULL;
 
+#ifdef MULTIPLE_OFFLOAD_ENABLED
+        bool multiOffloadEnabled = false;
+        char value[PROPERTY_VALUE_MAX] = {0};
+        property_get("audio.offload.multiple.enabled", value, "false");
+        if (atoi(value) || !strncmp("true", value, 4))
+            multiOffloadEnabled = true;
+        // if multiple concurrent offload decode is supported
+        // do no check for reuse and also don't close previous output if its offload
+        // previous output will be closed during track destruction
+        if (multiOffloadEnabled)
+            goto get_output__new_output_desc;
+#endif
         for (size_t i = 0; i < mOutputs.size(); i++) {
             AudioOutputDescriptor *desc = mOutputs.valueAt(i);
             if (!desc->isDuplicated() && (profile == desc->mProfile)) {
@@ -1085,6 +1097,7 @@ audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
         if (outputDesc != NULL) {
             closeOutput(outputDesc->mId);
         }
+get_output__new_output_desc:
         outputDesc = new AudioOutputDescriptor(profile);
         outputDesc->mDevice = device;
         outputDesc->mSamplingRate = samplingRate;
@@ -1323,7 +1336,7 @@ bool AudioPolicyManager::isOffloadSupported(const audio_offload_info_t& offloadI
         ALOGD("copl: Offload denied by duration < default min(=%u)", OFFLOAD_DEFAULT_MIN_DURATION_SECS);
         //duration checks only valid for MP3/AAC formats,
         //do not check duration for other audio formats, e.g. dolby AAC/AC3 and amrwb+ formats
-        if (offloadInfo.format == AUDIO_FORMAT_MP3 || offloadInfo.format == AUDIO_FORMAT_AAC || pcmOffload)
+        if (offloadInfo.format == AUDIO_FORMAT_MP3 || offloadInfo.format == AUDIO_FORMAT_AAC || (pcmOffload && offloadInfo.bit_width < 24))
             return false;
     }
 

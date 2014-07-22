@@ -176,6 +176,7 @@ struct stream_out {
     void *offload_cookie;
     struct compr_gapless_mdata gapless_mdata;
     int send_new_metadata;
+    unsigned int bit_width;
 
     struct audio_device *dev;
 };
@@ -246,6 +247,8 @@ struct audio_device {
     unsigned int cur_wfd_channels;
 
     int snd_card;
+    unsigned int cur_codec_backend_samplerate;
+    unsigned int cur_codec_backend_bit_width;
     void *platform;
     unsigned int offload_usecases_state;
     void *visualizer_lib;
@@ -274,6 +277,8 @@ struct audio_usecase *get_usecase_from_list(struct audio_device *adev,
                                                    audio_usecase_t uc_id);
 
 bool is_offload_usecase(audio_usecase_t uc_id);
+
+int pcm_ioctl(struct pcm *pcm, int request, ...);
 
 #define LITERAL_TO_STRING(x) #x
 #define CHECK(condition) LOG_ALWAYS_FATAL_IF(!(condition), "%s",\

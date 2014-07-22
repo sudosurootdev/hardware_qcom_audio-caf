@@ -148,12 +148,16 @@ static const audio_usecase_t offload_usecases[] = {
 #ifdef MULTIPLE_OFFLOAD_ENABLED
     USECASE_AUDIO_PLAYBACK_OFFLOAD2,
     USECASE_AUDIO_PLAYBACK_OFFLOAD3,
+#ifndef PLATFORM_MSM8974
     USECASE_AUDIO_PLAYBACK_OFFLOAD4,
     USECASE_AUDIO_PLAYBACK_OFFLOAD5,
     USECASE_AUDIO_PLAYBACK_OFFLOAD6,
     USECASE_AUDIO_PLAYBACK_OFFLOAD7,
+#endif
     USECASE_AUDIO_PLAYBACK_OFFLOAD8,
+#ifndef PLATFORM_MSM8974
     USECASE_AUDIO_PLAYBACK_OFFLOAD9,
+#endif
 #endif
 };
 
@@ -210,6 +214,9 @@ static bool is_supported_format(audio_format_t format)
         format == AUDIO_FORMAT_WMA ||
         format == AUDIO_FORMAT_WMA_PRO ||
         format == AUDIO_FORMAT_MP2 ||
+#ifdef FLAC_OFFLOAD_ENABLED
+        format == AUDIO_FORMAT_FLAC ||
+#endif
         format == AUDIO_FORMAT_PCM_16_BIT_OFFLOAD ||
         format == AUDIO_FORMAT_PCM_24_BIT_OFFLOAD)
            return true;
@@ -241,6 +248,11 @@ static int get_snd_codec_id(audio_format_t format)
     case AUDIO_FORMAT_PCM_24_BIT_OFFLOAD:
         id = SND_AUDIOCODEC_PCM;
         break;
+#ifdef FLAC_OFFLOAD_ENABLED
+    case AUDIO_FORMAT_FLAC:
+        id = SND_AUDIOCODEC_FLAC;
+        break;
+#endif
     default:
         ALOGE("%s: Unsupported audio format :%x", __func__, format);
     }
@@ -458,6 +470,15 @@ static void check_usecases_codec_backend(struct audio_device *adev,
      * because of the limitation that both the devices cannot be enabled
      * at the same time as they share the same backend.
      */
+    /*
+     * This call is to check if we need to force routing for a particular stream
+     * If there is a backend configuration change for the device when a
+     * new stream starts, then ADM needs to be closed and re-opened with the new
+     * configuraion. This call check if we need to re-route all the streams
+     * associated with the backend. Touch tone + 24 bit playback.
+     */
+    bool force_routing = platform_check_and_set_codec_backend_cfg(adev, uc_info);
+
     /* Disable all the usecases on the shared backend other than the
        specified usecase */
     for (i = 0; i < AUDIO_USECASE_MAX; i++)
@@ -467,7 +488,7 @@ static void check_usecases_codec_backend(struct audio_device *adev,
         usecase = node_to_item(node, struct audio_usecase, list);
         if (usecase->type != PCM_CAPTURE &&
                 usecase != uc_info &&
-                usecase->out_snd_device != snd_device &&
+                (usecase->out_snd_device != snd_device || force_routing)  &&
                 usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) {
             ALOGV("%s: Usecase (%s) is active on (%s) - disabling ..",
                   __func__, use_case_table[usecase->id],
@@ -843,7 +864,7 @@ int start_input_stream(struct stream_in *in)
 
     if (SND_CARD_STATE_OFFLINE == snd_card_status) {
         ALOGE("%s: sound card is not active/SSR returning error", __func__);
-        ret = -ENETRESET;
+        ret = -EIO;
         goto error_config;
     }
 
@@ -1233,7 +1254,7 @@ int start_output_stream(struct stream_out *out)
 
     if (SND_CARD_STATE_OFFLINE == snd_card_status) {
         ALOGE("%s: sound card is not active/SSR returning error", __func__);
-        ret = -ENETRESET;
+        ret = -EIO;
         goto error_config;
     }
 
@@ -1488,6 +1509,31 @@ static int parse_compress_metadata(struct stream_out *out, struct str_parms *par
         }
         out->send_new_metadata = 1;
     }
+
+#ifdef FLAC_OFFLOAD_ENABLED
+    if (out->format == AUDIO_FORMAT_FLAC) {
+        ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_FLAC_MIN_BLK_SIZE, value, sizeof(value));
+        if (ret >= 0) {
+            out->compr_config.codec->options.flac_dec.min_blk_size = atoi(value);
+            out->send_new_metadata = 1;
+        }
+        ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_FLAC_MAX_BLK_SIZE, value, sizeof(value));
+        if (ret >= 0) {
+            out->compr_config.codec->options.flac_dec.max_blk_size = atoi(value);
+            out->send_new_metadata = 1;
+        }
+        ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_FLAC_MIN_FRAME_SIZE, value, sizeof(value));
+        if (ret >= 0) {
+            out->compr_config.codec->options.flac_dec.min_frame_size = atoi(value);
+            out->send_new_metadata = 1;
+        }
+        ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_FLAC_MAX_FRAME_SIZE, value, sizeof(value));
+        if (ret >= 0) {
+            out->compr_config.codec->options.flac_dec.max_frame_size = atoi(value);
+            out->send_new_metadata = 1;
+        }
+    }
+#endif
 
     ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_SAMPLE_RATE, value, sizeof(value));
     if(ret >= 0)
@@ -1757,7 +1803,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
     if (SND_CARD_STATE_OFFLINE == snd_scard_state) {
         if (out->pcm) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
-            ret= -ENETRESET;
+            ret= -EIO;
             goto exit;
         } else if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
             //during SSR for compress usecase we should return error to flinger
@@ -1860,7 +1906,10 @@ static int out_get_render_position(const struct audio_stream_out *stream,
             set_snd_card_state(adev,SND_CARD_STATE_OFFLINE);
             return -EINVAL;
         } else if(ret < 0) {
-            ALOGE(" ERROR: Unable to get time stamp from compress driver");
+            if (out->compr == NULL) {
+                return 0;
+            }
+            ALOGE(" ERROR: Unable to get time stamp from compress driver ret=%d", ret);
             return -EINVAL;
         } else {
             return 0;
@@ -2196,7 +2245,7 @@ static ssize_t in_read(struct audio_stream_in *stream, void *buffer,
     if (in->pcm) {
         if(SND_CARD_STATE_OFFLINE == snd_scard_state) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
-            ret= -ENETRESET;
+            ret= -EIO;;
             goto exit;
         }
     }
@@ -2237,11 +2286,11 @@ exit:
         start/stop. Need to post different error to handle that. */
     if (-ENETRESET == ret) {
         set_snd_card_state(adev,SND_CARD_STATE_OFFLINE);
-        memset(buffer, 0, bytes);
     }
     pthread_mutex_unlock(&in->lock);
 
     if (ret != 0) {
+        memset(buffer, 0, bytes);
         in_standby(&in->stream.common);
         ALOGV("%s: read failed - sleeping for buffer duration", __func__);
         usleep(bytes * 1000000 / audio_stream_frame_size(&in->stream.common) /
@@ -2346,6 +2395,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->channel_mask = AUDIO_CHANNEL_OUT_STEREO;
     out->supported_channel_masks[0] = AUDIO_CHANNEL_OUT_STEREO;
     out->handle = handle;
+    out->bit_width = CODEC_BACKEND_DEFAULT_BIT_WIDTH;
 
     /* Init use case and pcm_config */
     if ((out->flags == AUDIO_OUTPUT_FLAG_DIRECT) &&
@@ -2420,6 +2470,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->stream.resume = out_resume;
         out->stream.drain = out_drain;
         out->stream.flush = out_flush;
+        out->bit_width = CODEC_BACKEND_DEFAULT_BIT_WIDTH;
 
 #ifdef DS1_DOLBY_DAP_ENABLED
         if (audio_extn_is_dolby_format(config->offload_info.format))
@@ -2449,12 +2500,27 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->compr_config.codec->ch_in =
                     popcount(config->channel_mask);
         out->compr_config.codec->ch_out = out->compr_config.codec->ch_in;
-        out->compr_config.codec->format = SND_AUDIOSTREAMFORMAT_RAW;
+        out->bit_width = config->offload_info.bit_width;
 
+        if (config->offload_info.format == AUDIO_FORMAT_AAC)
+            out->compr_config.codec->format = SND_AUDIOSTREAMFORMAT_RAW;
         if (config->offload_info.format == AUDIO_FORMAT_PCM_16_BIT_OFFLOAD)
             out->compr_config.codec->format = SNDRV_PCM_FORMAT_S16_LE;
-        else if(config->offload_info.format == AUDIO_FORMAT_PCM_24_BIT_OFFLOAD)
+        if(config->offload_info.format == AUDIO_FORMAT_PCM_24_BIT_OFFLOAD)
             out->compr_config.codec->format = SNDRV_PCM_FORMAT_S24_LE;
+
+        if (config->offload_info.bit_width == 24) {
+            out->compr_config.codec->format = SNDRV_PCM_FORMAT_S24_LE;
+        }
+
+        if (out->bit_width == 24 && !platform_check_24_bit_support()) {
+            ALOGW("24 bit support is not enabled, using 16 bit backend");
+            out->compr_config.codec->format = SNDRV_PCM_FORMAT_S16_LE;
+        }
+
+#ifdef FLAC_OFFLOAD_ENABLED
+        out->compr_config.codec->options.flac_dec.sample_size = config->offload_info.bit_width;
+#endif
 
         if (flags & AUDIO_OUTPUT_FLAG_NON_BLOCKING)
             out->non_blocking = 1;
@@ -2997,6 +3063,8 @@ static int adev_open(const hw_module_t *module, const char *name,
     adev->bluetooth_nrec = true;
     adev->acdb_settings = TTY_MODE_OFF;
     /* adev->cur_hdmi_channels = 0;  by calloc() */
+    adev->cur_codec_backend_samplerate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
+    adev->cur_codec_backend_bit_width = CODEC_BACKEND_DEFAULT_BIT_WIDTH;
     adev->snd_dev_ref_cnt = calloc(SND_DEVICE_MAX, sizeof(int));
     voice_init(adev);
     list_init(&adev->usecase_list);
@@ -3058,6 +3126,19 @@ static int adev_open(const hw_module_t *module, const char *name,
 
     ALOGV("%s: exit", __func__);
     return 0;
+}
+
+int pcm_ioctl(struct pcm *pcm, int request, ...)
+{
+    va_list ap;
+    void * arg;
+    int pcm_fd = *(int*)pcm;
+
+    va_start(ap, request);
+    arg = va_arg(ap, void *);
+    va_end(ap);
+
+    return ioctl(pcm_fd, request, arg);
 }
 
 static struct hw_module_methods_t hal_module_methods = {
