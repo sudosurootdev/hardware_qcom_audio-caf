@@ -33,6 +33,12 @@ ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
   endif
 endif
 
+ifneq ($(filter msm8916,$(TARGET_BOARD_PLATFORM)),)
+  AUDIO_PLATFORM = msm8916
+  MULTIPLE_HW_VARIANTS_ENABLED := true
+  LOCAL_CFLAGS := -DPLATFORM_MSM8916
+endif
+
 LOCAL_SRC_FILES := \
 	audio_hw.c \
 	voice.c \
@@ -61,6 +67,10 @@ endif
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_HFP)),true)
     LOCAL_CFLAGS += -DHFP_ENABLED
     LOCAL_SRC_FILES += audio_extn/hfp.c
+endif
+
+ifneq ($(strip $(AUDIO_FEATURE_DISABLED_CUSTOMSTEREO)),true)
+    LOCAL_CFLAGS += -DCUSTOM_STEREO_ENABLED
 endif
 
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_SSR)),true)
