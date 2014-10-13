@@ -127,8 +127,10 @@ static int pcm_device_table[AUDIO_USECASE_MAX][2] = {
                                             DEEP_BUFFER_PCM_DEVICE},
     [USECASE_AUDIO_PLAYBACK_LOW_LATENCY] = {LOWLATENCY_PCM_DEVICE,
                                            LOWLATENCY_PCM_DEVICE},
+#ifdef ULTRA_LOW_LATENCY_ENABLED
     [USECASE_AUDIO_PLAYBACK_ULTRA_LOW_LATENCY] = {ULTRA_LOWLATENCY_PCM_DEVICE,
                                                  ULTRA_LOWLATENCY_PCM_DEVICE},
+#endif
     [USECASE_AUDIO_PLAYBACK_MULTI_CH] = {MULTIMEDIA2_PCM_DEVICE,
                                         MULTIMEDIA2_PCM_DEVICE},
     [USECASE_AUDIO_PLAYBACK_OFFLOAD] =
@@ -449,7 +451,9 @@ static char * backend_table[SND_DEVICE_MAX] = {0};
 static struct name_to_index usecase_name_index[AUDIO_USECASE_MAX] = {
     {TO_NAME_INDEX(USECASE_AUDIO_PLAYBACK_DEEP_BUFFER)},
     {TO_NAME_INDEX(USECASE_AUDIO_PLAYBACK_LOW_LATENCY)},
+#ifdef ULTRA_LOW_LATENCY_ENABLED
     {TO_NAME_INDEX(USECASE_AUDIO_PLAYBACK_ULTRA_LOW_LATENCY)},
+#endif
     {TO_NAME_INDEX(USECASE_AUDIO_PLAYBACK_MULTI_CH)},
     {TO_NAME_INDEX(USECASE_AUDIO_PLAYBACK_OFFLOAD)},
     {TO_NAME_INDEX(USECASE_AUDIO_RECORD)},
@@ -1936,7 +1940,9 @@ int64_t platform_render_latency(audio_usecase_t usecase)
     switch (usecase) {
         case USECASE_AUDIO_PLAYBACK_DEEP_BUFFER:
             return DEEP_BUFFER_PLATFORM_DELAY;
+#ifdef ULTRA_LOW_LATENCY_ENABLED
         case USECASE_AUDIO_PLAYBACK_ULTRA_LOW_LATENCY:
+#endif
         case USECASE_AUDIO_PLAYBACK_LOW_LATENCY:
             return LOW_LATENCY_PLATFORM_DELAY;
         default:
@@ -1961,15 +1967,22 @@ int platform_update_usecase_from_source(int source, int usecase)
     }
 }
 
-bool platform_listen_update_status(snd_device_t snd_device)
+bool platform_listen_device_needs_event(snd_device_t snd_device)
 {
+    bool needs_event = false;
+
     if ((snd_device >= SND_DEVICE_IN_BEGIN) &&
         (snd_device < SND_DEVICE_IN_END) &&
         (snd_device != SND_DEVICE_IN_CAPTURE_FM) &&
         (snd_device != SND_DEVICE_IN_CAPTURE_VI_FEEDBACK))
-        return true;
-    else
-        return false;
+        needs_event = true;
+
+    return needs_event;
+}
+
+bool platform_listen_usecase_needs_event(audio_usecase_t uc_id)
+{
+    return false;
 }
 
 /* Read  offload buffer size from a property.
