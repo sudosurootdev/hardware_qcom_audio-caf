@@ -169,6 +169,12 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libexpat
 
+ifeq ($(strip $(AUDIO_FEATURE_MDM_DETECT)),true)
+    LOCAL_CFLAGS += -DMDM_DETECT
+    LOCAL_SHARED_LIBRARIES += libmdmdetect
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libmdmdetect/inc
+endif
+
 LOCAL_C_INCLUDES += \
 	external/tinyalsa/include \
 	external/tinycompress/include \
